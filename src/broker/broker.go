@@ -18,6 +18,7 @@ const (
 	queue_capacity = 10
 )
 
+// Fucntion to write a message from client corresponding queue to server.
 func serverWriteTo(name string, readConn net.Conn, queues []*queueingSystem.Queue) {
 	for {
 		for _, queue := range queues {
@@ -36,6 +37,7 @@ func serverWriteTo(name string, readConn net.Conn, queues []*queueingSystem.Queu
 	}
 }
 
+// Fucntion to write a message that is from a queue to a connection.
 func writeTo(name string, readConn net.Conn, queue *queueingSystem.Queue) {
 	for {
 		for queue.IsEmpty() {
@@ -52,6 +54,7 @@ func writeTo(name string, readConn net.Conn, queue *queueingSystem.Queue) {
 	}
 }
 
+// Fucntion to handle message passing asynchronously.
 func handleMessagePassingAsynchronously(serverConn, clientReadConn,
 	clientWriteConn net.Conn, sourceQueue *queueingSystem.Queue, handleBufferOverflow bool) {
 	signals := make(chan string)
@@ -65,11 +68,13 @@ func handleMessagePassingAsynchronously(serverConn, clientReadConn,
 	}
 }
 
+// Fucntion to handle running server async.
 func runServer(name string, serverReadConn, serverWriteConn net.Conn, sourceQueue []*queueingSystem.Queue, destinationQueue *queueingSystem.Queue, handleBufferOverflow bool) {
 	go readFrom(name, serverWriteConn, destinationQueue, handleBufferOverflow)
 	go serverWriteTo(name, serverReadConn, sourceQueue)
 }
 
+// Function to handle running client async. It will use goroutines for reading of each client and one goroutines for writing to server.
 func runClients(name string, readConns, writeConns []net.Conn, sourceQueues []*queueingSystem.Queue, destinationQueue *queueingSystem.Queue, handleBufferOverflow bool) {
 	for i, queue := range sourceQueues {
 		go readFrom(name+" "+fmt.Sprint(i), writeConns[i], queue, handleBufferOverflow)
@@ -78,6 +83,7 @@ func runClients(name string, readConns, writeConns []net.Conn, sourceQueues []*q
 	go writeTo(name, readConns[0], destinationQueue)
 }
 
+// Function to get number of clienst from standard input.
 func getClientsNumber() int {
 	fmt.Print("Enter number of clients: ")
 	input, _ := bufio.NewReader(os.Stdin).ReadString('\n')
@@ -87,6 +93,9 @@ func getClientsNumber() int {
 	return result
 }
 
+// Function to handle multi-way message passing asynchronously. It first initializes server.
+// Aks for number of clienst. Asynchronously multi-way message passing can handle multiple clients.
+// Initializes each client and its corresponding queue. Then it will run each client and server as a goroutines.
 func handleAsync(handleBufferOverflow bool) {
 	serverReadPort, serverWritePort := getPorts("server")
 
@@ -120,6 +129,7 @@ func handleAsync(handleBufferOverflow bool) {
 	}
 }
 
+// Function to handle multi-way message passing synchronously.
 func handleSync() {
 	serverReadPort, serverWritePort := getPorts("server")
 	clientReadPort, clientWritePort := getPorts("client")
@@ -162,6 +172,8 @@ func handleSync() {
 	}
 }
 
+// Function to handle multy-way messaging. Multi-way messaging can be handled
+// synchronously or asynchronously that is based on message passing mode parameter.
 func handleMultiWayMessaging(messagePassingMode string, handleBufferOverflow bool) {
 	switch messagePassingMode {
 	case "sync":
@@ -173,6 +185,8 @@ func handleMultiWayMessaging(messagePassingMode string, handleBufferOverflow boo
 	}
 }
 
+// Function to handle server. After receiving a message from client. The message will be edqueued.
+// So whenever the queue is not empty this funciton dequeues, and gets a message to send it to server.
 func handleServer(serverConn net.Conn, sourceQueue *queueingSystem.Queue,
 	signals chan string) {
 	for {
@@ -196,6 +210,9 @@ func handleServer(serverConn net.Conn, sourceQueue *queueingSystem.Queue,
 	}
 }
 
+// Function to handle writing to client. This function waits for a signal to
+// check whether client message is sent to server or not. If it is, a signal is passed thorough channel
+// an acknowledgment can be sent to client.
 func writeToClient(clientReadConn net.Conn, signals chan string) {
 	for {
 		message := <-signals
@@ -208,6 +225,9 @@ func writeToClient(clientReadConn net.Conn, signals chan string) {
 	}
 }
 
+// Function to handle reading. It infinitely receive message from a sender.
+// If handle buffer over flow is true it will try to handle messages by ignoring new messages for
+// 30 seconds so that queue gets less crowded otherwise buffer overflow results in error.
 func readFrom(name string, writeConn net.Conn, queue *queueingSystem.Queue, handleBufferOverflow bool) {
 	for {
 		_, err := receiveMessage(writeConn, queue)
@@ -224,16 +244,20 @@ func readFrom(name string, writeConn net.Conn, queue *queueingSystem.Queue, hand
 	}
 }
 
+// Function to handle client. This function uses two goroutines for reading and writing.
+// It means reading and writing will execute concurrently.
 func handleCLient(clientReadConn, clientWriteConn net.Conn,
 	sourceQueue *queueingSystem.Queue, signals chan string, handleBufferOverflow bool) {
 	go readFrom("client", clientWriteConn, sourceQueue, handleBufferOverflow)
 	go writeToClient(clientReadConn, signals)
 }
 
+// Function to send message to a receiver.
 func sendMessage(conn net.Conn, message string) {
 	fmt.Fprintf(conn, message+"\n")
 }
 
+// Function to receive message from a sender. The message will be enqueued to the corresponding queue.
 func receiveMessage(conn net.Conn, q *queueingSystem.Queue) (string, error) {
 	readData, err := bufio.NewReader(conn).ReadString('\n')
 
@@ -245,6 +269,7 @@ func receiveMessage(conn net.Conn, q *queueingSystem.Queue) (string, error) {
 	return readData, err
 }
 
+// Function to handle massage passing synchronously.
 func handleMessagePassingSynchronously(serverConn, clientReadConn,
 	clientWriteConn net.Conn, sourceQueue *queueingSystem.Queue) {
 	for {
@@ -273,6 +298,7 @@ func handleMessagePassingSynchronously(serverConn, clientReadConn,
 	}
 }
 
+// Function to create two TCP servers. One for reading, one for writing.
 func createTwoWayServer(ReadPort, WritePort string) (net.Conn,
 	net.Conn) {
 
@@ -287,6 +313,7 @@ func createTwoWayServer(ReadPort, WritePort string) (net.Conn,
 	return readConn, writeConn
 }
 
+// Function to create TCP server. Usually for reading.
 func createOneWayServer(ReadPort string) net.Conn {
 	readConn, err := createTCPserver(ReadPort)
 
@@ -295,6 +322,9 @@ func createOneWayServer(ReadPort string) net.Conn {
 	return readConn
 }
 
+// Fucntion to create TCP server and establish connection.
+// It first create a listener, after that it listen for any requests from clienst.
+// After that it will accept and establish connection.
 func createTCPserver(port string) (net.Conn, error) {
 	listener, err := net.Listen("tcp", ":"+port)
 
@@ -314,6 +344,7 @@ func createTCPserver(port string) (net.Conn, error) {
 	return conn, err
 }
 
+// Function to get two ports. One for reading and one for wrting.
 func getPorts(name string) (string, string) {
 	fmt.Println("Enter input: <" + name + " reading port> <" + name + " writing port>")
 	input, _ := bufio.NewReader(os.Stdin).ReadString('\n')
@@ -322,6 +353,7 @@ func getPorts(name string) (string, string) {
 	return inputs[0], inputs[1]
 }
 
+// Function to get one port number that is for reading.
 func getPort(name string) string {
 	fmt.Println("Enter input: <" + name + " reading port>")
 	input, _ := bufio.NewReader(os.Stdin).ReadString('\n')
@@ -330,6 +362,8 @@ func getPort(name string) string {
 	return inputs[0]
 }
 
+// Function to handle one way messaging. It first initializes server, client and corresponding queue.
+// Establishes TCP connections. And handle message passing synchronously or asynchronously based on message passing mode.
 func handleOneWayMessaging(messagePassingMode string, handleBufferOverflow bool) {
 	serverPort := getPort("server")
 	clientReadPort, clientWritePort := getPorts("client")
@@ -351,6 +385,9 @@ func handleOneWayMessaging(messagePassingMode string, handleBufferOverflow bool)
 	}
 }
 
+// Function to handle how program message passing work based on messaging mode that can be one or multi.
+// When messaging mode is one that means server only reads from broker.
+// when messaging mode is multi that means server reads and writes from and to broker.
 func handleMessagePassing(messagingMode, messagePassingMode string, handleBufferOverflow bool) {
 	switch messagingMode {
 	case "one":
@@ -363,6 +400,7 @@ func handleMessagePassing(messagingMode, messagePassingMode string, handleBuffer
 
 }
 
+// Function to get handle buffer overflow that can be true or false.
 func getHandleBufferOverflow() bool {
 	arguments := os.Args
 
@@ -370,18 +408,21 @@ func getHandleBufferOverflow() bool {
 	return result
 }
 
+// Function to get messaging passing mode that can be sync or async.
 func getMessagePassingMode() string {
 	arguments := os.Args
 
 	return arguments[2]
 }
 
+// Function to get messaging mode that can be one or multi.
 func getMessagingMode() string {
 	arguments := os.Args
 
 	return arguments[1]
 }
 
+// Function to get command line arguments.
 func getCommandLineArguments() (string, string, bool) {
 	messagingMode := getMessagingMode()
 	messagePassingMode := getMessagePassingMode()
@@ -389,6 +430,8 @@ func getCommandLineArguments() (string, string, bool) {
 	return messagingMode, messagePassingMode, handleBufferOverflow
 }
 
+// Function to handle error.
+// If there is an error it will be logged.
 func handleError(err error) {
 	if err != nil {
 		log.Println("ERROR: ", err)
@@ -396,6 +439,9 @@ func handleError(err error) {
 	}
 }
 
+// Function to check number of command line arguments.
+// There should be three arguments, for choosing messaging mode,
+// message passing mode and whether to handle buffer overflow.
 func checkCommandLineArguments() error {
 	arguments := os.Args
 
@@ -409,7 +455,6 @@ func checkCommandLineArguments() error {
 	return nil
 }
 
-// go run buffer_overflow/buffer_overflow.go one asynchronously true 8085 8086 8087 8087
 func main() {
 	err := checkCommandLineArguments()
 
