@@ -18,6 +18,24 @@ const (
 	queue_capacity = 10
 )
 
+func serverWriteTo(name string, readConn net.Conn, queues []*queueingSystem.Queue) {
+	for {
+		for _, queue := range queues {
+			if queue.IsEmpty() {
+				continue
+			}
+
+			message, _ := queue.Dequeue()
+
+			log.Println("LOG:", `send message to the `+name)
+
+			sendMessage(readConn, message)
+
+			// log.Println("LOG:", "client received request")
+		}
+	}
+}
+
 func writeTo(name string, readConn net.Conn, queue *queueingSystem.Queue) {
 	for {
 		for queue.IsEmpty() {
@@ -47,14 +65,54 @@ func handleMessagePassingAsynchronously(serverConn, clientReadConn,
 	}
 }
 
-func run(name string, serverReadConn, serverWriteConn net.Conn, sourceQueue, destinationQueue *queueingSystem.Queue, handleBufferOverflow bool) {
-	go readFrom(name, serverWriteConn, sourceQueue, handleBufferOverflow)
-	go writeTo(name, serverReadConn, destinationQueue)
+func runServer(name string, serverReadConn, serverWriteConn net.Conn, sourceQueue []*queueingSystem.Queue, destinationQueue *queueingSystem.Queue, handleBufferOverflow bool) {
+	go readFrom(name, serverWriteConn, destinationQueue, handleBufferOverflow)
+	go serverWriteTo(name, serverReadConn, sourceQueue)
 }
 
-func handleAsync(serverReadConn, serverWriteConn, clientReadConn, clientWriteConn net.Conn, sourceQueue, destinationQueue *queueingSystem.Queue, handleBufferOverflow bool) {
-	go run("client", clientReadConn, clientWriteConn, sourceQueue, destinationQueue, handleBufferOverflow)
-	go run("server", serverReadConn, serverWriteConn, destinationQueue, sourceQueue, handleBufferOverflow)
+func runClients(name string, readConns, writeConns []net.Conn, sourceQueues []*queueingSystem.Queue, destinationQueue *queueingSystem.Queue, handleBufferOverflow bool) {
+	for i, queue := range sourceQueues {
+		go readFrom(name+" "+fmt.Sprint(i), writeConns[i], queue, handleBufferOverflow)
+	}
+
+	go writeTo(name, readConns[0], destinationQueue)
+}
+
+func getClientsNumber() int {
+	fmt.Print("Enter number of clients: ")
+	input, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+
+	result, _ := strconv.Atoi(strings.TrimSpace(input))
+
+	return result
+}
+
+func handleAsync(handleBufferOverflow bool) {
+	serverReadPort, serverWritePort := getPorts("server")
+
+	serverReadConn, serverWriteConn := createTwoWayServer(serverReadPort, serverWritePort)
+
+	readConns := make([]net.Conn, 0)
+	writeConns := make([]net.Conn, 0)
+	sourceQueues := make([]*queueingSystem.Queue, 0)
+
+	clientsNumber := getClientsNumber()
+
+	for i := 0; i < clientsNumber; i++ {
+		clientReadPort, clientWritePort := getPorts("client")
+		clientReadConn, clientWriteConn := createTwoWayServer(clientReadPort, clientWritePort)
+		readConns = append(readConns, clientReadConn)
+		writeConns = append(writeConns, clientWriteConn)
+
+		sourceQueue := queueingSystem.CreateQueue(queue_capacity)
+		sourceQueues = append(sourceQueues, sourceQueue)
+	}
+
+	destinationQueue := queueingSystem.CreateQueue(queue_capacity)
+
+	go runClients("client", readConns, writeConns, sourceQueues, destinationQueue, handleBufferOverflow)
+
+	go runServer("server", serverReadConn, serverWriteConn, sourceQueues, destinationQueue, handleBufferOverflow)
 
 	for {
 		time.Sleep(10 * time.Second)
@@ -62,7 +120,15 @@ func handleAsync(serverReadConn, serverWriteConn, clientReadConn, clientWriteCon
 	}
 }
 
-func handleSync(serverReadConn, serverWriteConn, clientReadConn, clientWriteConn net.Conn, sourceQueue *queueingSystem.Queue) {
+func handleSync() {
+	serverReadPort, serverWritePort := getPorts("server")
+	clientReadPort, clientWritePort := getPorts("client")
+
+	serverReadConn, serverWriteConn := createTwoWayServer(serverReadPort, serverWritePort)
+	clientReadConn, clientWriteConn := createTwoWayServer(clientReadPort, clientWritePort)
+
+	sourceQueue := queueingSystem.CreateQueue(queue_capacity)
+
 	for {
 		_, err := receiveMessage(clientWriteConn, sourceQueue)
 
@@ -97,20 +163,11 @@ func handleSync(serverReadConn, serverWriteConn, clientReadConn, clientWriteConn
 }
 
 func handleMultiWayMessaging(messagePassingMode string, handleBufferOverflow bool) {
-	serverReadPort, serverWritePort := getPorts("server")
-	clientReadPort, clientWritePort := getPorts("client")
-
-	serverReadConn, serverWriteConn := createTwoWayServer(serverReadPort, serverWritePort)
-	clientReadConn, clientWriteConn := createTwoWayServer(clientReadPort, clientWritePort)
-
-	sourceQueue := queueingSystem.CreateQueue(queue_capacity)
-	destinationQueue := queueingSystem.CreateQueue(queue_capacity)
-
 	switch messagePassingMode {
 	case "sync":
-		handleSync(serverReadConn, serverWriteConn, clientReadConn, clientWriteConn, sourceQueue)
+		handleSync()
 	case "async":
-		handleAsync(serverReadConn, serverWriteConn, clientReadConn, clientWriteConn, sourceQueue, destinationQueue, handleBufferOverflow)
+		handleAsync(handleBufferOverflow)
 	default:
 		log.Println("ERROR:", "mode does not exist")
 	}
@@ -303,6 +360,7 @@ func handleMessagePassing(messagingMode, messagePassingMode string, handleBuffer
 	default:
 		log.Println("ERROR:", "mode does not exist")
 	}
+
 }
 
 func getHandleBufferOverflow() bool {
