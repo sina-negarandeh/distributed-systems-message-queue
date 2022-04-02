@@ -7,16 +7,17 @@ import (
 	"log"
 	"net"
 	"os"
+	"strings"
 	"time"
 )
 
-func handleWrite(port string) {
+func handleWrite(port, name string) {
 	conn, _ := createTCPclient(port)
 
 	messageNumber := 0
 	for {
 		message := "request " + fmt.Sprint(messageNumber)
-		sendMessage(conn, message)
+		sendMessage(conn, message, name)
 		println(">> " + message)
 		messageNumber++
 	}
@@ -59,9 +60,9 @@ func receiveMessage(conn net.Conn) (string, error) {
 	return message, err
 }
 
-func sendMessage(conn net.Conn, message string) {
+func sendMessage(conn net.Conn, message, name string) {
 	time.Sleep(3 * time.Second)
-	fmt.Fprintf(conn, message+"\n")
+	fmt.Fprintf(conn, "client "+name+" "+message+"\n")
 }
 
 func createTCPclient(port string) (net.Conn, error) {
@@ -72,12 +73,12 @@ func createTCPclient(port string) (net.Conn, error) {
 	return conn, err
 }
 
-func handleMessagePassingAsynchronously(readingPort, writingPort string) {
+func handleMessagePassingAsynchronously(readingPort, writingPort, name string) {
 	go handleRead(readingPort)
 
 	time.Sleep(1 * time.Second)
 
-	go handleWrite(writingPort)
+	go handleWrite(writingPort, name)
 
 	for {
 		time.Sleep(10 * time.Second)
@@ -85,7 +86,7 @@ func handleMessagePassingAsynchronously(readingPort, writingPort string) {
 	}
 }
 
-func handleMessagePassingSynchronously(readingPort, writingPort string) {
+func handleMessagePassingSynchronously(readingPort, writingPort, name string) {
 	clientReadConn, _ := createTCPclient(readingPort)
 	time.Sleep(1 * time.Second)
 	clientWriteConn, _ := createTCPclient(writingPort)
@@ -93,12 +94,19 @@ func handleMessagePassingSynchronously(readingPort, writingPort string) {
 	messageNumber := 0
 	for {
 		message := "request " + fmt.Sprint(messageNumber)
-		sendMessage(clientWriteConn, message)
+		sendMessage(clientWriteConn, message, name)
 		println(">> " + message)
 		messageNumber++
 
 		receiveMessage(clientReadConn)
 	}
+}
+
+func getName() string {
+	fmt.Print("Enter a name: ")
+	name, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+
+	return strings.TrimSpace(name)
 }
 
 func getPortNumbers() (string, string, error) {
@@ -109,14 +117,15 @@ func getPortNumbers() (string, string, error) {
 
 func handleMessagePassing(messagePassingMode string) {
 	readingPort, writingPort, err := getPortNumbers()
+	name := getName()
 
 	handleError(err)
 
 	switch messagePassingMode {
 	case "synchronously":
-		handleMessagePassingSynchronously(readingPort, writingPort)
+		handleMessagePassingSynchronously(readingPort, writingPort, name)
 	case "asynchronously":
-		handleMessagePassingAsynchronously(readingPort, writingPort)
+		handleMessagePassingAsynchronously(readingPort, writingPort, name)
 	default:
 		log.Println("ERROR:", "mode does not exist")
 	}
