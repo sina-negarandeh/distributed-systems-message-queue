@@ -11,11 +11,14 @@ import (
 	"time"
 )
 
+// Function to pring a text on standard output.
 func write(text string) {
 	fmt.Print(">> processing " + text)
 	// fmt.Fprintf(conn, "processing "+text)
 }
 
+// Function to handle server writing. It first creates a TCP client and establishes a connection.
+// It tryes to write message to broekr (TCP server).
 func handleWrite(port string, messages chan string) {
 	conn, _ := createTCPclient(port)
 
@@ -30,6 +33,8 @@ func handleWrite(port string, messages chan string) {
 	}
 }
 
+// Function to handle server reading. It first creates a TCP client and establishes a connection.
+// Then starts receiving messages from broekr (TCP server).
 func handleRead(port string, messages chan string) {
 	conn, _ := createTCPclient(port)
 
@@ -39,6 +44,7 @@ func handleRead(port string, messages chan string) {
 	}
 }
 
+// Function to handle network errors.
 func handleNetError(err error) {
 	if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
 		fmt.Println("read timeout:", err) // time out
@@ -47,6 +53,7 @@ func handleNetError(err error) {
 	}
 }
 
+// Function to receive a message from a server with given connection.
 func receiveMessage(conn net.Conn) (string, error) {
 	// set SetReadDeadline
 	err := conn.SetReadDeadline(time.Now().Add(50 * time.Second))
@@ -68,11 +75,13 @@ func receiveMessage(conn net.Conn) (string, error) {
 	return message, err
 }
 
+// Function to send a message to a server with given message and connection.
 func sendMessage(conn net.Conn, message string) {
 	time.Sleep(3 * time.Second)
 	fmt.Fprintf(conn, "server "+message+"\n")
 }
 
+// Fucntion to create TCP client and establish connection.
 func createTCPclient(port string) (net.Conn, error) {
 	conn, err := net.Dial("tcp", ":"+port)
 
@@ -81,6 +90,7 @@ func createTCPclient(port string) (net.Conn, error) {
 	return conn, err
 }
 
+// Function to handle massage passing asynchronously.
 func handleMessagePassingAsynchronously(readingPort, writingPort string) {
 	messages := make(chan string, 10)
 
@@ -96,6 +106,7 @@ func handleMessagePassingAsynchronously(readingPort, writingPort string) {
 	}
 }
 
+// Function to handle massage passing synchronously.
 func handleMessagePassingSynchronously(readingPort, writingPort string) {
 	fmt.Println(readingPort, writingPort)
 
@@ -114,6 +125,7 @@ func handleMessagePassingSynchronously(readingPort, writingPort string) {
 	}
 }
 
+// Function to get two ports. One for reading and one for wrting.
 func getPorts(name string) (string, string) {
 	fmt.Println("Enter input: <" + name + " reading port> <" + name + " writing port>")
 	input, _ := bufio.NewReader(os.Stdin).ReadString('\n')
@@ -122,6 +134,7 @@ func getPorts(name string) (string, string) {
 	return inputs[0], inputs[1]
 }
 
+// Function to handle how server message passing works when messaging mode is multi
 func handleMultiWayMessaging() {
 	messagePassingMode := getMessagePassingMode()
 	readingPort, writingPort := getPorts("server")
@@ -136,6 +149,7 @@ func handleMultiWayMessaging() {
 	}
 }
 
+// Function to get one port number that is for reading.
 func getPort(name string) string {
 	fmt.Println("Enter input: <" + name + " reading port>")
 	input, _ := bufio.NewReader(os.Stdin).ReadString('\n')
@@ -144,6 +158,7 @@ func getPort(name string) string {
 	return inputs[0]
 }
 
+// Function to handle how server message passing works when messaging mode is one
 func handleOneWayMessaging() {
 	readingPort := getPort("server")
 
@@ -156,6 +171,9 @@ func handleOneWayMessaging() {
 
 }
 
+// Function to handle how server message passing works based on messaging mode that can be one or multi.
+// When messaging mode is one that means server only reads from broker.
+// when messaging mode is multi that means server reads and writes from and to broker.
 func handleMessagePassing(messagingMode string) {
 	switch messagingMode {
 	case "one":
@@ -167,23 +185,28 @@ func handleMessagePassing(messagingMode string) {
 	}
 }
 
+// Function to get messaging passing mode that can be sync or async.
 func getMessagePassingMode() string {
 	arguments := os.Args
 
 	return arguments[2]
 }
 
+// Function to get messaging mode that can be one or multi.
 func getMessagingMode() string {
 	arguments := os.Args
 
 	return arguments[1]
 }
 
+// Function to get command line arguments.
 func getCommandLineArguments() string {
 	getMessagingMode := getMessagingMode()
 	return getMessagingMode
 }
 
+// Function to handle error.
+// If there is an error it will be logged.
 func handleError(err error) {
 	if err != nil {
 		fmt.Println(err)
@@ -191,6 +214,7 @@ func handleError(err error) {
 	}
 }
 
+// Function to check number of command line arguments.
 func checkCommandLineArguments() error {
 	arguments := os.Args
 
