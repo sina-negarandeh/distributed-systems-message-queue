@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -24,7 +25,9 @@ func sendMessage(conn net.Conn, message string) {
 func receiveMessage(conn net.Conn, q *queueingSystem.Queue) (string, error) {
 	readData, err := bufio.NewReader(conn).ReadString('\n')
 
-	q.Enqueue(string(readData))
+	handleError(err)
+
+	err = q.Enqueue(string(readData))
 	log.Println("LOG:", "enqueued to queue", "SIZE:", q.GetSize())
 
 	return readData, err
@@ -112,28 +115,34 @@ func writeToClient(clientReadConn net.Conn, signals chan string) {
 	}
 }
 
-func readFromClient(clientWriteConn net.Conn, sourceQueue *queueingSystem.Queue) {
+func readFromClient(clientWriteConn net.Conn, sourceQueue *queueingSystem.Queue, handleBufferOverflow bool) {
 	for {
 		_, err := receiveMessage(clientWriteConn, sourceQueue)
 
-		handleError(err)
+		if handleBufferOverflow && err != nil {
+			// clientWriteConn.Close()
+			log.Println("ERROR:", err)
+			time.Sleep(30 * time.Second)
+		} else {
+			handleError(err)
+			log.Println("LOG:", "client request is received")
+		}
 
-		log.Println("LOG:", "client request is received")
 	}
 }
 
 func handleCLient(clientReadConn, clientWriteConn net.Conn,
-	sourceQueue *queueingSystem.Queue, signals chan string) {
-	go readFromClient(clientWriteConn, sourceQueue)
+	sourceQueue *queueingSystem.Queue, signals chan string, handleBufferOverflow bool) {
+	go readFromClient(clientWriteConn, sourceQueue, handleBufferOverflow)
 	// fmt.Println(clientReadConn.LocalAddr())
 	go writeToClient(clientReadConn, signals)
 }
 
 func handleMessagePassingAsynchronously(serverConn, clientReadConn,
-	clientWriteConn net.Conn, sourceQueue *queueingSystem.Queue) {
+	clientWriteConn net.Conn, sourceQueue *queueingSystem.Queue, handleBufferOverflow bool) {
 	signals := make(chan string)
 
-	go handleCLient(clientReadConn, clientWriteConn, sourceQueue, signals)
+	go handleCLient(clientReadConn, clientWriteConn, sourceQueue, signals, handleBufferOverflow)
 	go handleServer(serverConn, sourceQueue, signals)
 
 	for {
@@ -143,14 +152,14 @@ func handleMessagePassingAsynchronously(serverConn, clientReadConn,
 }
 
 func handleMessagePassing(messagePassingMode string, serverConn, clientReadConn,
-	clientWriteConn net.Conn, sourceQueue *queueingSystem.Queue) {
+	clientWriteConn net.Conn, sourceQueue *queueingSystem.Queue, handleBufferOverflow bool) {
 	switch messagePassingMode {
 	case "synchronously":
 		handleMessagePassingSynchronously(serverConn, clientReadConn,
 			clientWriteConn, sourceQueue)
 	case "asynchronously":
 		handleMessagePassingAsynchronously(serverConn, clientReadConn,
-			clientWriteConn, sourceQueue)
+			clientWriteConn, sourceQueue, handleBufferOverflow)
 	default:
 		log.Println("ERROR:", "mode does not exist")
 	}
@@ -185,10 +194,18 @@ func getMessagePassingMode() string {
 	return arguments[1]
 }
 
-func getCommandLineArguments() (string, string, string, string) {
+func getHandleBufferOverflow() bool {
+	arguments := os.Args
+
+	result, _ := strconv.ParseBool(arguments[5])
+	return result
+}
+
+func getCommandLineArguments() (string, string, string, string, bool) {
 	messagePassingMode := getMessagePassingMode()
 	serverPort, clientReadPort, clientWritePort := getPortNumbers()
-	return messagePassingMode, serverPort, clientReadPort, clientWritePort
+	handleBufferOverflow := getHandleBufferOverflow()
+	return messagePassingMode, serverPort, clientReadPort, clientWritePort, handleBufferOverflow
 }
 
 func handleError(err error) {
@@ -201,10 +218,10 @@ func handleError(err error) {
 func checkCommandLineArguments() error {
 	arguments := os.Args
 
-	if len(arguments) < 5 {
+	if len(arguments) < 6 {
 		return errors.New(`error: too few arguments. please provide port
 		 numbers for reading and writing`)
-	} else if len(arguments) > 5 {
+	} else if len(arguments) > 6 {
 		fmt.Println()
 		return errors.New(`error: too many arguments. please provide 
 		port numbers for reading and writing`)
@@ -218,7 +235,7 @@ func main() {
 
 	handleError(err)
 
-	messagePassingMode, serverPort, clientReadPort, clientWritePort := getCommandLineArguments()
+	messagePassingMode, serverPort, clientReadPort, clientWritePort, handleBufferOverflow := getCommandLineArguments()
 
 	serverConn, clientReadConn, clientWriteConn := connect(serverPort,
 		clientReadPort, clientWritePort)
@@ -228,5 +245,5 @@ func main() {
 	handleError(err)
 
 	handleMessagePassing(messagePassingMode, serverConn, clientReadConn,
-		clientWriteConn, sourceQueue)
+		clientWriteConn, sourceQueue, handleBufferOverflow)
 }
