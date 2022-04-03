@@ -38,19 +38,15 @@ func serverWriteTo(name string, readConn net.Conn, queues []*queueingSystem.Queu
 }
 
 // Fucntion to write a message that is from a queue to a connection.
-func writeTo(name string, readConn net.Conn, queue *queueingSystem.Queue) {
+func writeTo(name string, readConns []net.Conn, queue *queueingSystem.Queue) {
 	for {
-		for queue.IsEmpty() {
-
+		if queue.IsEmpty() {
+			continue
 		}
-
 		message, _ := queue.Dequeue()
-
-		log.Println("LOG:", `send message to the `+name)
-
-		sendMessage(readConn, message)
-
-		// log.Println("LOG:", "client received request")
+		inputs := strings.Split(strings.TrimSpace(message), " ")
+		index, _ := strconv.Atoi(inputs[5])
+		sendMessage(readConns[index], message)
 	}
 }
 
@@ -80,7 +76,7 @@ func runClients(name string, readConns, writeConns []net.Conn, sourceQueues []*q
 		go readFrom(name+" "+fmt.Sprint(i), writeConns[i], queue, handleBufferOverflow)
 	}
 
-	go writeTo(name, readConns[0], destinationQueue)
+	go writeTo(name, readConns, destinationQueue)
 }
 
 // Function to get number of clienst from standard input.
